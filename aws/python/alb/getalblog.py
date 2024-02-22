@@ -94,15 +94,19 @@ def get_last_log_time(es, es_index):
         print(f"获取最后日志时间出错: {e}")
     return None
 
-def get_alb_logs(bucket_name, base_prefix, es_host, es_index, es_user, es_pass):
+def get_alb_logs(bucket_name, base_prefix, log_path_prefix, es_host, es_index, es_user, es_pass):
     s3_client = boto3.client('s3')
     es = Elasticsearch([es_host], http_auth=(es_user, es_pass))
 
-    ensure_index_exists( es, es_index )
+    ensure_index_exists(es, es_index)
 
+    # 获取当前年份和月份
     current_year = datetime.now().year
     current_month = datetime.now().month
-    month_prefix = f"{base_prefix}{current_year}/{str(current_month).zfill(2)}/"  # Ensure month is zero-padded
+    # 调整 month_prefix 以匹配您的日志文件路径结构
+    month_prefix = f"{base_prefix}/{log_path_prefix}/{current_year}/{str(current_month).zfill(2)}/"
+
+    print(month_prefix)
 
     last_log_time = get_last_log_time(es, es_index)
     if last_log_time:
@@ -113,7 +117,7 @@ def get_alb_logs(bucket_name, base_prefix, es_host, es_index, es_user, es_pass):
     paginator = s3_client.get_paginator('list_objects_v2')
     page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=month_prefix)
 
-    actions = []  # Prepare a list to hold bulk actions for Elasticsearch
+    actions = []  # 准备一个列表来保存 Elasticsearch 的批量操作
 
     for page in page_iterator:
         if "Contents" in page:
@@ -124,12 +128,13 @@ def get_alb_logs(bucket_name, base_prefix, es_host, es_index, es_user, es_pass):
                 with gzip.GzipFile(fileobj=BytesIO(obj_data['Body'].read())) as gzipfile:
                     for line in gzipfile:
                         log_entry_data = line.decode('utf-8')
+                        # 解析日志时间戳，确保它与您的日志格式匹配
                         log_timestamp = datetime.strptime(log_entry_data.split()[1], '%Y-%m-%dT%H:%M:%S')
                         if not last_log_time or log_timestamp > last_log_time:
                             log_entry = {'_index': es_index, '_source': {'log': log_entry_data, 'timestamp': log_timestamp.strftime('%Y-%m-%dT%H:%M:%S')}}
                             actions.append(log_entry)
     
-    # Bulk index the logs into Elasticsearch
+    # 将日志批量索引到 Elasticsearch
     if actions:
         helpers.bulk(es, actions)
         print(f"Indexed {len(actions)} logs to Elasticsearch index {es_index}.")
@@ -138,6 +143,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="从S3中获取ALB日志并存储到Elasticsearch")
     parser.add_argument("--bucket", required=True, help="S3桶名")
     parser.add_argument("--base_prefix", required=True, help="日志文件基础前缀")
+    parser.add_argument("--log_path_prefix", required=True, help="日志路径前缀")
     parser.add_argument("--es_host", required=True, help="Elasticsearch主机地址")
     parser.add_argument("--es_index", required=True, help="Elasticsearch索引名")
     parser.add_argument("--es_user", required=True, help="Elasticsearch用户名")
@@ -145,7 +151,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    get_alb_logs(args.bucket, args.base_prefix, args.es_host, args.es_index, args.es_user, args.es_pass)
+    get_alb_logs(args.bucket, args.base_prefix, args.log_path_prefix, args.es_host, args.es_index, args.es_user, args.es_pass)
 
 
 

@@ -128,14 +128,21 @@ def get_alb_logs(bucket_name, base_prefix, log_path_prefix, es_host, es_index, e
                 with gzip.GzipFile(fileobj=BytesIO(obj_data['Body'].read())) as gzipfile:
                     for line in gzipfile:
                         log_entry_data = line.decode('utf-8')
-                        # 假设日志时间戳字段位于日志条目的特定位置，这里需要根据实际情况调整
-                        log_timestamp_str = log_entry_data.split()[1]
-                        # 移除时间字符串末尾的 'Z' 字符
-                        log_timestamp_str = log_timestamp_str.rstrip('Z')
-                        # 调整时间格式字符串以匹配日志中的时间戳格式
-                        log_timestamp = datetime.strptime(log_timestamp_str, '%Y-%m-%dT%H:%M')
+                        # 分割日志条目以获取各个字段
+                        log_parts = log_entry_data.split(' ')
+                        # 获取时间戳字段，假设它总是在固定的位置
+                        log_timestamp_str = log_parts[1]
+                        # 解析时间戳，包括毫秒和 'Z'（UTC标志）
+                        log_timestamp = datetime.strptime(log_timestamp_str, '%Y-%m-%dT%H:%M:%S.%fZ')
                         if not last_log_time or log_timestamp > last_log_time:
-                            log_entry = {'_index': es_index, '_source': {'log': log_entry_data, 'timestamp': log_timestamp.strftime('%Y-%m-%dT%H:%M:%S')}}
+                            # 构建 Elasticsearch 文档
+                            log_entry = {
+                                '_index': es_index,
+                                '_source': {
+                                    'log': log_entry_data,
+                                    'timestamp': log_timestamp.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+                                }
+                            }
                             actions.append(log_entry)
     
     # 将日志批量索引到 Elasticsearch

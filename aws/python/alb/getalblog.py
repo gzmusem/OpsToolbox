@@ -28,9 +28,50 @@ python getalblog.py --bucket_name 'your_bucket_name' --base_prefix 'your_base_pr
 import boto3
 import argparse
 import gzip
+import re
+import json
 from io import BytesIO
 from datetime import datetime, timedelta
 from elasticsearch import Elasticsearch, helpers
+
+
+
+def parse_log_line(line):
+    # 使用正则表达式提取日志中的字段
+    pattern = re.compile(r'^https (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+)$')
+    match = pattern.match(line)
+    
+    if match:
+        # 将字段存储到字典中
+        data = {
+            "timestamp": match.group(1),
+            "app": match.group(2),
+            "client": match.group(3),
+            "target": match.group(4),
+            "request_processing_time": match.group(5),
+            "target_processing_time": match.group(6),
+            "response_processing_time": match.group(7),
+            "elb_status_code": match.group(8),
+            "target_status_code": match.group(9),
+            "received_bytes": match.group(10),
+            "sent_bytes": match.group(11),
+            "request": match.group(12),
+            "user_agent": match.group(13),
+            "ssl_cipher": match.group(14),
+            "ssl_protocol": match.group(15),
+            "target_group_arn": match.group(16),
+            "trace_id": match.group(17),
+            "domain": match.group(18),
+            "certificate_arn": match.group(19),
+            "forwarded": match.group(20),
+            "redirect_url": match.group(21),
+            "server_ip": match.group(22),
+            "server_port": match.group(23),
+            "protocol": match.group(24),
+        }
+        return data
+    else:
+        return None
 
 
 def ensure_index_exists(es, es_index):
@@ -82,13 +123,9 @@ def get_alb_logs(bucket_name, base_prefix, log_path_prefix, es_host, es_index, e
 
     ensure_index_exists(es, es_index)
 
-    # 获取当前年份和月份
     current_year = datetime.now().year
     current_month = datetime.now().month
-    # 调整 month_prefix 以匹配您的日志文件路径结构
-    month_prefix = f"{base_prefix}/{log_path_prefix}/{current_year}/{str(current_month).zfill(2)}/"
-
-    print(month_prefix)
+    month_prefix = f"{log_path_prefix}/{base_prefix}/{current_year}/{str(current_month).zfill(2)}/"
 
     last_log_time = get_last_log_time(es, es_index)
     if last_log_time:
@@ -110,22 +147,22 @@ def get_alb_logs(bucket_name, base_prefix, log_path_prefix, es_host, es_index, e
                 with gzip.GzipFile(fileobj=BytesIO(obj_data['Body'].read())) as gzipfile:
                     for line in gzipfile:
                         log_entry_data = line.decode('utf-8')
-                        # 分割日志条目以获取各个字段
-                        log_parts = log_entry_data.split(' ')
-                        # 获取时间戳字段，假设它总是在固定的位置
-                        log_timestamp_str = log_parts[1]
-                        # 解析时间戳，包括毫秒和 'Z'（UTC标志）
-                        log_timestamp = datetime.strptime(log_timestamp_str, '%Y-%m-%dT%H:%M:%S.%fZ')
-                        if not last_log_time or log_timestamp > last_log_time:
-                            # 构建 Elasticsearch 文档
-                            log_entry = {
-                                '_index': es_index,
-                                '_source': {
-                                    'log': log_entry_data,
-                                    'timestamp': log_timestamp.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+                        log_data = parse_log_line(log_entry_data)
+                        if log_data:  # 确保日志行被成功解析
+                            # 假设原始的 timestamp 是以 '%Y-%m-%dT%H:%M:%S.%fZ' 格式提供的
+                            original_timestamp = datetime.strptime(log_data["timestamp"], '%Y-%m-%dT%H:%M:%S.%fZ')
+                            # 调整 timestamp 格式为 ISO 8601 格式（或其他所需格式）
+                            adjusted_timestamp = original_timestamp.strftime('%Y-%m-%dT%H:%M:%SZ')
+                            log_data["timestamp"] = adjusted_timestamp  # 更新字典中的 timestamp
+                            
+                            # 检查 timestamp 是否晚于最后一条日志的时间
+                            if not last_log_time or original_timestamp > last_log_time:
+                                log_entry = {
+                                    '_index': es_index,
+                                    '_source': log_data
                                 }
-                            }
-                            actions.append(log_entry)
+                                actions.append(log_entry)
+    
     
     # 将日志批量索引到 Elasticsearch
     if actions:

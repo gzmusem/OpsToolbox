@@ -128,8 +128,12 @@ def get_alb_logs(bucket_name, base_prefix, log_path_prefix, es_host, es_index, e
                 with gzip.GzipFile(fileobj=BytesIO(obj_data['Body'].read())) as gzipfile:
                     for line in gzipfile:
                         log_entry_data = line.decode('utf-8')
-                        # 解析日志时间戳，确保它与您的日志格式匹配
-                        log_timestamp = datetime.strptime(log_entry_data.split()[1], '%Y-%m-%dT%H:%M:%S')
+                        # 假设日志时间戳字段位于日志条目的特定位置，这里需要根据实际情况调整
+                        log_timestamp_str = log_entry_data.split()[1]
+                        # 移除时间字符串末尾的 'Z' 字符
+                        log_timestamp_str = log_timestamp_str.rstrip('Z')
+                        # 调整时间格式字符串以匹配日志中的时间戳格式
+                        log_timestamp = datetime.strptime(log_timestamp_str, '%Y-%m-%dT%H:%M')
                         if not last_log_time or log_timestamp > last_log_time:
                             log_entry = {'_index': es_index, '_source': {'log': log_entry_data, 'timestamp': log_timestamp.strftime('%Y-%m-%dT%H:%M:%S')}}
                             actions.append(log_entry)

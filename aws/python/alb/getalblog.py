@@ -125,7 +125,7 @@ def get_alb_logs(bucket_name, base_prefix, log_path_prefix, es_host, es_index, e
 
     current_year = datetime.now().year
     current_month = datetime.now().month
-    month_prefix = f"{log_path_prefix}/{base_prefix}/{current_year}/{str(current_month).zfill(2)}/"
+    month_prefix = f"{base_prefix}/{log_path_prefix}/{current_year}/{str(current_month).zfill(2)}/"
 
     last_log_time = get_last_log_time(es, es_index)
     if last_log_time:

@@ -44,30 +44,12 @@ def ensure_index_exists(es, es_index):
             "mappings": {
                 "properties": {
                     "log": {
-                        "properties": {
-                            "timestamp": {"type": "date"},
-                            "elb_status_code": {"type": "keyword"},
-                            "target_status_code": {"type": "keyword"},
-                            "request_processing_time": {"type": "float"},
-                            "target_processing_time": {"type": "float"},
-                            "response_processing_time": {"type": "float"},
-                            "elb_request_method": {"type": "keyword"},
-                            "request_url": {"type": "text"},
-                            "request_protocol": {"type": "keyword"},
-                            "user_agent": {"type": "text"},
-                            "ssl_cipher": {"type": "keyword"},
-                            "ssl_protocol": {"type": "keyword"},
-                            "target_group_arn": {"type": "keyword"},
-                            "trace_id": {"type": "keyword"},
-                            "domain_name": {"type": "keyword"},
-                            "chosen_cert_arn": {"type": "keyword"},
-                            "matched_rule_priority": {"type": "keyword"},
-                            "request_creation_time": {"type": "date"},
-                            "actions_executed": {"type": "keyword"},
-                            "redirect_url": {"type": "text"},
-                            "error_reason": {"type": "text"}
-                        }
+                        "type": "text"  # 确保log字段被映射为text类型
+                    },
+                    "timestamp": {
+                        "type": "date"  # 确保timestamp字段被映射为date类型
                     }
+                    # 根据需要添加其他字段的映射
                 }
             }
         }

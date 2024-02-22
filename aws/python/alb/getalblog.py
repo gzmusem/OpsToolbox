@@ -132,43 +132,42 @@ def get_alb_logs(bucket_name, base_prefix, log_path_prefix, es_host, es_index, e
         print(f"Last log time: {last_log_time}")
     else:
         print("No previous logs found. Starting from the beginning of the month.")
-    try:
-        paginator = s3_client.get_paginator('list_objects_v2')
-        page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=month_prefix)
 
-        actions = []  # 准备一个列表来保存 Elasticsearch 的批量操作
+    paginator = s3_client.get_paginator('list_objects_v2')
+    page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=month_prefix)
 
-        for page in page_iterator:
-            if "Contents" in page:
-                for obj in page['Contents']:
-                    log_file = obj['Key']
-                    print(f"Processing ALB log: {log_file}")
-                    obj_data = s3_client.get_object(Bucket=bucket_name, Key=log_file)
-                    with gzip.GzipFile(fileobj=BytesIO(obj_data['Body'].read())) as gzipfile:
-                        for line in gzipfile:
-                            log_entry_data = line.decode('utf-8')
-                            log_data = parse_log_line(log_entry_data)
-                            if log_data:  # 确保日志行被成功解析
-                                # 假设原始的 timestamp 是以 '%Y-%m-%dT%H:%M:%S.%fZ' 格式提供的
-                                original_timestamp = datetime.strptime(log_data["timestamp"], '%Y-%m-%dT%H:%M:%S.%fZ')
-                                # 调整 timestamp 格式为 ISO 8601 格式（或其他所需格式）
-                                adjusted_timestamp = original_timestamp.strftime('%Y-%m-%dT%H:%M:%SZ')
-                                log_data["timestamp"] = adjusted_timestamp  # 更新字典中的 timestamp
-                                
-                                # 检查 timestamp 是否晚于最后一条日志的时间
-                                if not last_log_time or original_timestamp > last_log_time:
-                                    log_entry = {
-                                        '_index': es_index,
-                                        '_source': log_data
-                                    }
-                                    actions.append(log_entry)
-        
-        # 将日志批量索引到 Elasticsearch
-        if actions:
-            helpers.bulk(es, actions)
-            print(f"Indexed {len(actions)} logs to Elasticsearch index {es_index}.")
-    except Exception as e:
-        print(f"处理日志文件时发生错误: {e}")
+    actions = []  # 准备一个列表来保存 Elasticsearch 的批量操作
+
+    for page in page_iterator:
+        if "Contents" in page:
+            for obj in page['Contents']:
+                log_file = obj['Key']
+                print(f"Processing ALB log: {log_file}")
+                obj_data = s3_client.get_object(Bucket=bucket_name, Key=log_file)
+                with gzip.GzipFile(fileobj=BytesIO(obj_data['Body'].read())) as gzipfile:
+                    for line in gzipfile:
+                        log_entry_data = line.decode('utf-8')
+                        log_data = parse_log_line(log_entry_data)
+                        if log_data:  # 确保日志行被成功解析
+                            # 假设原始的 timestamp 是以 '%Y-%m-%dT%H:%M:%S.%fZ' 格式提供的
+                            original_timestamp = datetime.strptime(log_data["timestamp"], '%Y-%m-%dT%H:%M:%S.%fZ')
+                            # 调整 timestamp 格式为 ISO 8601 格式（或其他所需格式）
+                            adjusted_timestamp = original_timestamp.strftime('%Y-%m-%dT%H:%M:%SZ')
+                            log_data["timestamp"] = adjusted_timestamp  # 更新字典中的 timestamp
+                            
+                            # 检查 timestamp 是否晚于最后一条日志的时间
+                            if not last_log_time or original_timestamp > last_log_time:
+                                log_entry = {
+                                    '_index': es_index,
+                                    '_source': log_data
+                                }
+                                actions.append(log_entry)
+    
+    
+    # 将日志批量索引到 Elasticsearch
+    if actions:
+        helpers.bulk(es, actions)
+        print(f"Indexed {len(actions)} logs to Elasticsearch index {es_index}.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="从S3中获取ALB日志并存储到Elasticsearch")

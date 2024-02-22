@@ -162,13 +162,13 @@ def get_alb_logs(bucket_name, base_prefix, log_path_prefix, es_host, es_index, e
                                         '_source': log_data
                                     }
                                     actions.append(log_entry)
+        
+        # 将日志批量索引到 Elasticsearch
+        if actions:
+            helpers.bulk(es, actions)
+            print(f"Indexed {len(actions)} logs to Elasticsearch index {es_index}.")
     except Exception as e:
         print(f"处理日志文件时发生错误: {e}")
-    
-    # 将日志批量索引到 Elasticsearch
-    if actions:
-        helpers.bulk(es, actions)
-        print(f"Indexed {len(actions)} logs to Elasticsearch index {es_index}.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="从S3中获取ALB日志并存储到Elasticsearch")

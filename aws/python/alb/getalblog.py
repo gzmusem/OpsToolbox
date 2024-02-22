@@ -94,8 +94,8 @@ def ensure_index_exists(es, es_index):
                 }
             }
         }
-        # 创建索引
-        es.indices.create(index=es_index, body=index_mappings)
+        # 创建索引，直接传递映射参数
+        es.indices.create(index=es_index, mappings=index_mappings["mappings"])
         print(f"索引 '{es_index}' 已创建。")
     else:
         print(f"索引 '{es_index}' 已存在。")
@@ -107,8 +107,8 @@ def get_last_log_time(es, es_index):
         result = es.search(
             index=es_index,
             size=1,
-            sort=[{"log.timestamp": {"order": "desc"}}],
-            _source=["log.timestamp"]
+            sort=[{"timestamp": {"order": "desc"}}],  # 直接使用 "timestamp"
+            _source=["timestamp"]
         )
         if result['hits']['hits']:
             last_log_time_str = result['hits']['hits'][0]['_source']['log']['timestamp']

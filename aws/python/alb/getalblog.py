@@ -80,18 +80,18 @@ def ensure_index_exists(es, es_index):
 
 def get_last_log_time(es, es_index):
     try:
-        # Query to get the latest log entry
-        body = {
-            "size": 1,
-            "sort": [{"log.timestamp": {"order": "desc"}}],
-            "_source": ["log.timestamp"]
-        }
-        result = es.search(index=es_index, body=body)
+        # 调整为直接使用参数，而不是 'body'
+        result = es.search(
+            index=es_index,
+            size=1,
+            sort=[{"log.timestamp": {"order": "desc"}}],
+            _source=["log.timestamp"]
+        )
         if result['hits']['hits']:
             last_log_time_str = result['hits']['hits'][0]['_source']['log']['timestamp']
             return datetime.strptime(last_log_time_str, '%Y-%m-%dT%H:%M:%S')
     except Exception as e:
-        print(f"Error getting last log time: {e}")
+        print(f"获取最后日志时间出错: {e}")
     return None
 
 def get_alb_logs(bucket_name, base_prefix, es_host, es_index, es_user, es_pass):

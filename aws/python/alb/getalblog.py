@@ -44,36 +44,43 @@ def parse_log_line(line):
     
     if match:
         data = {
-            "type":match.group(1),
+            "type": match.group(1),
             "timestamp": match.group(2),
-            "app": match.group(3) + ":" + match.group(4),
-            "client": match.group(5)+ ":" + match.group(6),
-            "target": match.group(7),
-            "request_processing_time": match.group(8),
-            "target_processing_time": match.group(9),
-            "response_processing_time": match.group(10),
-            "elb_status_code": match.group(11),
+            "elb": match.group(3),
+            "client_ip": match.group(4),
+            "client_port": int(match.group(5)),
+            "target_ip": match.group(6),
+            "target_port": int(match.group(7)),
+            "request_processing_time": float(match.group(8)),
+            "target_processing_time": float(match.group(9)),
+            "response_processing_time": float(match.group(10)),
+            "elb_status_code": int(match.group(11)),
             "target_status_code": match.group(12),
-            "received_bytes": match.group(13),
-            "sent_bytes": match.group(14),
-            "request": match.group(15),
-            "user_agent": match.group(16),
-            "ssl_cipher": match.group(17),
-            "ssl_protocol": match.group(18),
-            "target_group_arn": match.group(19),
-            "trace_id": match.group(20),
-            "domain": match.group(21),
-            "certificate_arn": match.group(22),
-            "forwarded": match.group(23),
-            "redirect_url": match.group(24),
-            "server_ip": match.group(25),
-            "server_port": match.group(26),
-            "protocol": match.group(27),
+            "received_bytes": int(match.group(13)),
+            "sent_bytes": int(match.group(14)),
+            "request_verb": match.group(15),
+            "request_url": match.group(16),
+            "request_proto": match.group(17),
+            "user_agent": match.group(18),
+            "ssl_cipher": match.group(19),
+            "ssl_protocol": match.group(20),
+            "target_group_arn": match.group(21),
+            "trace_id": match.group(22),
+            "domain_name": match.group(23),
+            "chosen_cert_arn": match.group(24),
+            "matched_rule_priority": match.group(25),
+            "request_creation_time": match.group(26),
+            "actions_executed": match.group(27),
+            "redirect_url": match.group(28),
+            "lambda_error_reason": match.group(29),
+            "target_port_list": match.group(30),
+            "target_status_code_list": match.group(31),
+            "classification": match.group(32),
+            "classification_reason": match.group(33)
         }
         return data
     else:
         return None
-
 
 def ensure_index_exists(es, es_index):
     """

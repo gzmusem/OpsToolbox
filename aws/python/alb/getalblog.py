@@ -36,13 +36,13 @@ from elasticsearch import Elasticsearch, helpers
 
 
 
+import re
+
 def parse_log_line(line):
-    # 使用正则表达式提取日志中的字段
-    pattern = re.compile(r'^https (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+)$')
+    pattern = re.compile(r'([^ ]*) ([^ ]*) ([^ ]*) ([^ ]*):([0-9]*) ([^ ]*)[:-]([0-9]*) ([-.0-9]*) ([-.0-9]*) ([-.0-9]*) (|[-0-9]*) (-|[-0-9]*) ([-0-9]*) ([-0-9]*) "([^ ]*) (.*) (- |[^ ]*)" "([^"]*)" ([A-Z0-9-_]+) ([A-Za-z0-9.-]*) ([^ ]*) "([^"]*)" "([^"]*)" "([^"]*)" ([-.0-9]*) ([^ ]*) "([^"]*)" "([^"]*)" "([^ ]*)" "([^\s]+?)" "([^\s]+)" "([^ ]*)" "([^ ]*)"')
     match = pattern.match(line)
     
     if match:
-        # 将字段存储到字典中
         data = {
             "timestamp": match.group(1),
             "app": match.group(2),
@@ -148,6 +148,7 @@ def get_alb_logs(bucket_name, base_prefix, log_path_prefix, es_host, es_index, e
                     for line in gzipfile:
                         log_entry_data = line.decode('utf-8')
                         log_data = parse_log_line(log_entry_data)
+
                         if log_data:  # 确保日志行被成功解析
                             # 假设原始的 timestamp 是以 '%Y-%m-%dT%H:%M:%S.%fZ' 格式提供的
                             original_timestamp = datetime.strptime(log_data["timestamp"], '%Y-%m-%dT%H:%M:%S.%fZ')

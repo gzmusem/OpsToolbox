@@ -147,9 +147,10 @@ def get_alb_logs(bucket_name, base_prefix, log_path_prefix, es_host, es_index, e
                 obj_data = s3_client.get_object(Bucket=bucket_name, Key=log_file)
                 with gzip.GzipFile(fileobj=BytesIO(obj_data['Body'].read())) as gzipfile:
                     for line in gzipfile:
+                        print(line)
                         log_entry_data = line.decode('utf-8')
                         log_data = parse_log_line(log_entry_data)
-
+                        print(log_data)
                         if log_data:  # 确保日志行被成功解析
                             # 假设原始的 timestamp 是以 '%Y-%m-%dT%H:%M:%S.%fZ' 格式提供的
                             original_timestamp = datetime.strptime(log_data["timestamp"], '%Y-%m-%dT%H:%M:%S.%fZ')

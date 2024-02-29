@@ -181,9 +181,14 @@ def get_alb_logs(bucket_name, base_prefix, log_path_prefix, es_host, es_index, e
         else:
             print("Error: Unable to get earliest log time from S3.")
 
+    if last_log_time is not None:
+        current_year = last_log_time.year
+        current_month = last_log_time.month
+    else:
+        # 如果 last_log_time 为 None，则取当前年和当前月
+        current_year = datetime.now().year
+        current_month = datetime.now().month
 
-    current_year = last_log_time.year
-    current_month = last_log_time.month
     month_prefix = f"{base_prefix}/{log_path_prefix}/{current_year}/{str(current_month).zfill(2)}/"
 
 

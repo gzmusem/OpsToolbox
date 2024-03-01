@@ -34,7 +34,7 @@ from io import BytesIO
 from datetime import datetime, timedelta
 from elasticsearch import Elasticsearch, helpers
 from datetime import datetime
-
+from datetime import timezone
 
 
 def parse_log_line(line):
@@ -81,17 +81,6 @@ def parse_log_line(line):
     else:
         return None
 
-def create_index_with_date(es, base_index_name):
-    # 获取当前日期
-    current_date = datetime.now().strftime("%Y.%m.%d")
-    
-    # 构建带有日期的索引名称
-    index_name = f"{base_index_name}-{current_date}"
-    
-    # 创建索引
-    es.indices.create(index=index_name)
-    
-    return index_name
 
 
 def get_earliest_alb_log_date(bucket_name, prefix):
@@ -139,6 +128,7 @@ def get_earliest_alb_log_date(bucket_name, prefix):
 def get_last_log_time(es, es_index):
     try:
         # 调整为直接使用参数，而不是 'body'
+        print(es_index)
         result = es.search(
             index=es_index,
             size=1,
@@ -146,8 +136,8 @@ def get_last_log_time(es, es_index):
             _source=["timestamp"]
         )
         if result['hits']['hits']:
-            last_log_time_str = result['hits']['hits'][0]['_source']['log']['timestamp']
-            return datetime.strptime(last_log_time_str, '%Y-%m-%dT%H:%M:%S')
+            last_log_time_str = result['hits']['hits'][0]['_source']['timestamp']
+            return datetime.strptime(last_log_time_str, '%Y-%m-%dT%H:%M:%SZ')
     except Exception as e:
         print(f"获取最后日志时间出错: {e}")
     return None
@@ -156,13 +146,16 @@ def get_last_log_time(es, es_index):
 
 def get_alb_logs(bucket_name, base_prefix, log_path_prefix, es_host, es_index, es_user, es_pass):
     s3_client = boto3.client('s3')
-    es = Elasticsearch([es_host], http_auth=(es_user, es_pass))
+    if es_user and es_pass:
+        es = Elasticsearch([es_host], http_auth=(es_user, es_pass))
+    else:
+        es = Elasticsearch([es_host])    
 
         # 构建索引名称
     index_name = f"{es_index}-"
 
     # 检查是否存在以base_index_name开头的索引
-    existing_indices = [index for index in es.indices.get('*') if index.startswith(es_index)]
+    existing_indices = [index for index in es.indices.get('*') if index.startswith(index_name)]
     
     if existing_indices:
         # 存在索引，查询最后的日志时间
@@ -174,55 +167,58 @@ def get_alb_logs(bucket_name, base_prefix, log_path_prefix, es_host, es_index, e
     else:
         # 不存在索引，从S3查询最早的开始时间
         last_log_time = get_earliest_alb_log_date(bucket_name,f"{base_prefix}/{log_path_prefix}/")
-        if last_log_time:
-            # 根据最早时间创建索引
-            index_name += last_log_time.strftime("%Y.%m.%d")
-            create_index_with_date(es, index_name)
-        else:
-            print("Error: Unable to get earliest log time from S3.")
 
-    if last_log_time is not None:
-        current_year = last_log_time.year
-        current_month = last_log_time.month
-    else:
-        # 如果 last_log_time 为 None，则取当前年和当前月
-        current_year = datetime.now().year
-        current_month = datetime.now().month
 
-    month_prefix = f"{base_prefix}/{log_path_prefix}/{current_year}/{str(current_month).zfill(2)}/"
+    #month_prefix = f"{base_prefix}/{log_path_prefix}/{log_year}/{str(log_month).zfill(2)}/"
+    log_prefix = f"{base_prefix}/{log_path_prefix}/"
 
 
     paginator = s3_client.get_paginator('list_objects_v2')
-    page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=month_prefix)
+    page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=log_prefix)
 
     actions = []  # 准备一个列表来保存 Elasticsearch 的批量操作
 
     for page in page_iterator:
         if "Contents" in page:
             for obj in page['Contents']:
-                log_file = obj['Key']
-                print(f"Processing ALB log: {log_file}")
-                obj_data = s3_client.get_object(Bucket=bucket_name, Key=log_file)
-                with gzip.GzipFile(fileobj=BytesIO(obj_data['Body'].read())) as gzipfile:
-                    for line in gzipfile:
-                        print(line)
-                        log_entry_data = line.decode('utf-8')
-                        log_data = parse_log_line(log_entry_data)
-                        print(log_data)
-                        if log_data:  # 确保日志行被成功解析
-                            # 假设原始的 timestamp 是以 '%Y-%m-%dT%H:%M:%S.%fZ' 格式提供的
-                            original_timestamp = datetime.strptime(log_data["timestamp"], '%Y-%m-%dT%H:%M:%S.%fZ')
-                            # 调整 timestamp 格式为 ISO 8601 格式（或其他所需格式）
-                            adjusted_timestamp = original_timestamp.strftime('%Y-%m-%dT%H:%M:%SZ')
-                            log_data["timestamp"] = adjusted_timestamp  # 更新字典中的 timestamp
-                            
-                            # 检查 timestamp 是否晚于最后一条日志的时间
-                            if not last_log_time or original_timestamp > last_log_time:
-                                log_entry = {
-                                    '_index': es_index,
-                                    '_source': log_data
-                                }
-                                actions.append(log_entry)
+
+                obj_last_modified = obj['LastModified']
+                obj_last_modified = obj_last_modified.replace(tzinfo=timezone.utc)
+                last_log_time = last_log_time.replace(tzinfo=timezone.utc)
+                if obj_last_modified >= last_log_time:
+                    log_file = obj['Key']                   
+                    print(f"Processing ALB log: {log_file}")
+                    obj_data = s3_client.get_object(Bucket=bucket_name, Key=log_file)
+                    with gzip.GzipFile(fileobj=BytesIO(obj_data['Body'].read())) as gzipfile:
+                        for line in gzipfile:
+
+                            log_entry_data = line.decode('utf-8')
+                            log_data = parse_log_line(log_entry_data)
+                            #print(log_data)
+                            if log_data:  # 确保日志行被成功解析
+                                # 假设原始的 timestamp 是以 '%Y-%m-%dT%H:%M:%S.%fZ' 格式提供的
+                                original_timestamp = datetime.strptime(log_data["timestamp"], '%Y-%m-%dT%H:%M:%S.%fZ')
+                                # 调整 timestamp 格式为 ISO 8601 格式（或其他所需格式）
+                                adjusted_timestamp = original_timestamp.strftime('%Y-%m-%dT%H:%M:%SZ')
+                                log_data["timestamp"] = adjusted_timestamp  # 更新字典中的 timestamp
+                                
+                                #log_date = datetime.strptime(log_data['timestamp'], '%Y-%m-%d')
+                                index_name = f"{es_index}-{original_timestamp.strftime('%Y_%m_%d')}".lower()
+
+                                original_timestamp = original_timestamp.replace(tzinfo=timezone.utc)
+                                # 检查 timestamp 是否晚于最后一条日志的时间
+                                if not last_log_time or original_timestamp > last_log_time:
+                                    # Add action to the list
+                                    action = {
+                                        "_index": index_name,
+                                        "_source": log_data,
+                                    }
+                                    actions.append(action)
+
+                                # Perform bulk indexing in batches of 500 actions
+                                if len(actions) == 500:
+                                    helpers.bulk(es, actions)
+                                    actions = []  # Clear actions list after bulk indexing
     
     
     # 将日志批量索引到 Elasticsearch
@@ -237,10 +233,13 @@ if __name__ == "__main__":
     parser.add_argument("--log_path_prefix", required=True, help="日志路径前缀")
     parser.add_argument("--es_host", required=True, help="Elasticsearch主机地址")
     parser.add_argument("--es_index", required=True, help="Elasticsearch索引名")
-    parser.add_argument("--es_user", required=True, help="Elasticsearch用户名")
-    parser.add_argument("--es_pass", required=True, help="Elasticsearch密码")
+    parser.add_argument("--es_user", default=None, help="Elasticsearch用户名")
+    parser.add_argument("--es_pass", default=None, help="Elasticsearch密码")
 
     args = parser.parse_args()
+
+    es_user = args.es_user if args.es_user else None
+    es_pass = args.es_pass if args.es_pass else None
 
     get_alb_logs(args.bucket, args.base_prefix, args.log_path_prefix, args.es_host, args.es_index, args.es_user, args.es_pass)
 

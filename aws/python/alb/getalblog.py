@@ -13,8 +13,8 @@
 - base_prefix: S3存储桶中ALB日志的基础前缀
 - es_host: Elasticsearch服务的主机地址
 - es_index: 存储日志的Elasticsearch索引名称
-- es_user: 访问Elasticsearch服务的用户名
-- es_pass: 访问Elasticsearch服务的密码
+- es_user: 访问Elasticsearch服务的用户名，如果没有可以不填 
+- es_pass: 访问Elasticsearch服务的密码，如果没有可以不填
 
 使用示例:
 python getalblog.py --bucket_name 'your_bucket_name' --base_prefix 'your_base_prefix' --es_host 'your_es_host' --es_index 'your_es_index' --es_user 'your_es_user' --es_pass 'your_es_pass'
